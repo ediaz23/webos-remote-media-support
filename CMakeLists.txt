@@ -56,36 +56,45 @@ set(_env
 )
 
 # ===== Helpers =====
-function(ep_meson name srcdir extra_setup_args)
+# Meson caches options; we wipe the per-project build dir for reproducibility.
+# IMPORTANT: ExternalProject does "cd BINARY_DIR" before running CONFIGURE_COMMAND,
+# so BINARY_DIR must always exist. We use SUPERBUILD_DIR as BINARY_DIR and a subdir per project.
+function(ep_meson name srcdir)
+  set(extra_setup_args ${ARGN})
+  set(_build_subdir "${SUPERBUILD_DIR}/${name}")
+
   ExternalProject_Add(${name}
-    PREFIX         "${EP_META_DIR}"              
-    SOURCE_DIR     "${srcdir}"
-    BINARY_DIR     "${SUPERBUILD_DIR}/${name}"   
+    PREFIX     "${EP_META_DIR}/${name}"
+    SOURCE_DIR "${srcdir}"
+    BINARY_DIR "${SUPERBUILD_DIR}"    # must exist for ExternalProject's internal "cd"
     CONFIGURE_COMMAND
-      ${CMAKE_COMMAND} -E env ${_env}
-      ${MESON_EXECUTABLE} setup "${SUPERBUILD_DIR}/${name}" "${srcdir}"
-        --prefix "${PREFIX_DIR}"                 
-        --libdir "lib"
-        --buildtype "${_cfg}"
-        -Ddefault_library=static
-        ${extra_setup_args}
+      ${CMAKE_COMMAND} -E rm -rf "${_build_subdir}"
+      COMMAND ${CMAKE_COMMAND} -E make_directory "${_build_subdir}"
+      COMMAND ${CMAKE_COMMAND} -E env ${_env}
+              ${MESON_EXECUTABLE} setup "${_build_subdir}" "${srcdir}"
+                --prefix "${PREFIX_DIR}"
+                --libdir "lib"
+                --buildtype "${_cfg}"
+                --default-library=static
+                ${extra_setup_args}
     BUILD_COMMAND
       ${CMAKE_COMMAND} -E env ${_env}
-      ${MESON_EXECUTABLE} compile -C "${SUPERBUILD_DIR}/${name}"
+      ${MESON_EXECUTABLE} compile -C "${_build_subdir}"
     INSTALL_COMMAND
       ${CMAKE_COMMAND} -E env ${_env}
-      ${MESON_EXECUTABLE} install -C "${SUPERBUILD_DIR}/${name}"
+      ${MESON_EXECUTABLE} install -C "${_build_subdir}"
     USES_TERMINAL_BUILD ON
   )
 endfunction()
 
-function(ep_cmake name srcdir extra_cmake_args)
+function(ep_cmake name srcdir)
+  set(extra_cmake_args ${ARGN})
   ExternalProject_Add(${name}
-    PREFIX         "${EP_META_DIR}"              
-    SOURCE_DIR     "${srcdir}"
-    BINARY_DIR     "${SUPERBUILD_DIR}/${name}"   
+    PREFIX     "${EP_META_DIR}/${name}"
+    SOURCE_DIR "${srcdir}"
+    BINARY_DIR "${SUPERBUILD_DIR}/${name}"
     CMAKE_ARGS
-      -DCMAKE_INSTALL_PREFIX=${PREFIX_DIR}       
+      -DCMAKE_INSTALL_PREFIX=${PREFIX_DIR}
       -DCMAKE_BUILD_TYPE=${_cmake_build_type}
       -DBUILD_SHARED_LIBS=OFF
       -DCMAKE_POSITION_INDEPENDENT_CODE=ON
@@ -109,35 +118,44 @@ set(PATH_FONTCONFIG "${DEPS_DIR}/fontconfig")
 set(PATH_LIBASS     "${DEPS_DIR}/libass")
 
 # ===== Dependencies =====
-ep_cmake(brotli_ep   "${PATH_BROTLI}"   "")
+ep_cmake(brotli_ep   "${PATH_BROTLI}")
 ep_cmake(freetype_ep "${PATH_FREETYPE}" -DFT_DISABLE_BROTLI=OFF)
 add_dependencies(freetype_ep brotli_ep)
 
-ep_meson(fribidi_ep  "${PATH_FRIBIDI}" -Ddocs=false -Dtests=false)
+# FriBidi
+ep_meson(fribidi_ep  "${PATH_FRIBIDI}"
+  -Ddocs=false
+  -Dtests=disabled
+)
 add_dependencies(fribidi_ep freetype_ep)
 
+# HarfBuzz (mínimo para libass)
 ep_meson(harfbuzz_ep "${PATH_HARFBUZZ}"
-    -Dfreetype=enabled
-    -Dtests=disabled
-    -Dintrospection=disabled
-    -Ddocs=disabled
-    -Ddoc_tests=false
-    -Dutilities=disabled
+  -Dfreetype=enabled
+  -Dtests=disabled
+  -Dutilities=disabled
+  -Dintrospection=disabled
+  -Ddocs=disabled
+  -Ddoc_tests=false
 )
 add_dependencies(harfbuzz_ep freetype_ep fribidi_ep)
 
-# Fontconfig is optional. (docs option here is NOT boolean in some versions; use disabled)
-ep_meson(fontconfig_ep "${PATH_FONTCONFIG}" -Ddoc=disabled -Dtests=disabled -Dtools=disabled)
+# Fontconfig
+ep_meson(fontconfig_ep "${PATH_FONTCONFIG}"
+  -Ddoc=disabled
+  -Dtests=disabled
+  -Dtools=disabled
+)
 add_dependencies(fontconfig_ep freetype_ep)
 
 # libass
 ep_meson(libass_ep "${PATH_LIBASS}"
-    -Dtest=disabled
-    -Dcompare=disabled
-    -Dprofile=disabled
-    -Dfuzz=disabled
-    -Dcheckasm=disabled
-    -Dfontconfig=enabled
+  -Dtest=disabled
+  -Dcompare=disabled
+  -Dprofile=disabled
+  -Dfuzz=disabled
+  -Dcheckasm=disabled
+  -Dfontconfig=enabled
 )
 add_dependencies(libass_ep freetype_ep fribidi_ep harfbuzz_ep fontconfig_ep)
 
