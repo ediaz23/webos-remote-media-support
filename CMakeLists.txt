@@ -125,7 +125,7 @@ add_dependencies(freetype_ep brotli_ep)
 # FriBidi
 ep_meson(fribidi_ep  "${PATH_FRIBIDI}"
   -Ddocs=false
-  -Dtests=disabled
+  -Dtests=false
 )
 add_dependencies(fribidi_ep freetype_ep)
 
@@ -133,10 +133,10 @@ add_dependencies(fribidi_ep freetype_ep)
 ep_meson(harfbuzz_ep "${PATH_HARFBUZZ}"
   -Dfreetype=enabled
   -Dtests=disabled
-  -Dutilities=disabled
   -Dintrospection=disabled
   -Ddocs=disabled
   -Ddoc_tests=false
+  -Dutilities=disabled
 )
 add_dependencies(harfbuzz_ep freetype_ep fribidi_ep)
 
