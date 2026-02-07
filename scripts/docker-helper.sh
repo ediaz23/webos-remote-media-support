@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 PROFILE="${PROFILE:-dev}"
-BUILD_DIR="build-docker"
+BUILD_DIR="build"
 
-cmake -S . -B "$BUILD_DIR" -DPROFILE="$PROFILE"
-cmake --build "$BUILD_DIR" -j
+cmake -S . -B "$BUILD_DIR/cmake" -DPROFILE="$PROFILE"
+cmake --build "$BUILD_DIR/cmake" -j

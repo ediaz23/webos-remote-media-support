@@ -11,13 +11,17 @@ set(DEPS_DIR "${CMAKE_SOURCE_DIR}/lib")
 set(SUPERBUILD_DIR "${CMAKE_BINARY_DIR}/_deps_build")
 
 # Where compiled libs/headers will be installed (like jassub build/libraries)
-set(PREFIX_DIR "${CMAKE_BINARY_DIR}/libraries")
+set(PREFIX_DIR "${CMAKE_SOURCE_DIR}/build/libraries")
 
 # Where the final executable should go
 set(DIST_DIR "${CMAKE_SOURCE_DIR}/dist")
 
+# Meta dirs for ExternalProject (stamp/tmp/prefix) in one place
+set(EP_META_DIR "${CMAKE_BINARY_DIR}/_meta")
+
 # Ensure folders exist
 file(MAKE_DIRECTORY "${SUPERBUILD_DIR}")
+file(MAKE_DIRECTORY "${EP_META_DIR}")
 file(MAKE_DIRECTORY "${PREFIX_DIR}")
 file(MAKE_DIRECTORY "${DIST_DIR}")
 file(MAKE_DIRECTORY "${DIST_DIR}/bin")
@@ -54,12 +58,13 @@ set(_env
 # ===== Helpers =====
 function(ep_meson name srcdir extra_setup_args)
   ExternalProject_Add(${name}
-    SOURCE_DIR      "${srcdir}"
-    BINARY_DIR      "${SUPERBUILD_DIR}/${name}"
+    PREFIX         "${EP_META_DIR}"              
+    SOURCE_DIR     "${srcdir}"
+    BINARY_DIR     "${SUPERBUILD_DIR}/${name}"   
     CONFIGURE_COMMAND
       ${CMAKE_COMMAND} -E env ${_env}
       ${MESON_EXECUTABLE} setup "${SUPERBUILD_DIR}/${name}" "${srcdir}"
-        --prefix "${PREFIX_DIR}"
+        --prefix "${PREFIX_DIR}"                 
         --libdir "lib"
         --buildtype "${_cfg}"
         -Ddefault_library=static
@@ -76,10 +81,11 @@ endfunction()
 
 function(ep_cmake name srcdir extra_cmake_args)
   ExternalProject_Add(${name}
-    SOURCE_DIR      "${srcdir}"
-    BINARY_DIR      "${SUPERBUILD_DIR}/${name}"
+    PREFIX         "${EP_META_DIR}"              
+    SOURCE_DIR     "${srcdir}"
+    BINARY_DIR     "${SUPERBUILD_DIR}/${name}"   
     CMAKE_ARGS
-      -DCMAKE_INSTALL_PREFIX=${PREFIX_DIR}
+      -DCMAKE_INSTALL_PREFIX=${PREFIX_DIR}       
       -DCMAKE_BUILD_TYPE=${_cmake_build_type}
       -DBUILD_SHARED_LIBS=OFF
       -DCMAKE_POSITION_INDEPENDENT_CODE=ON
@@ -104,23 +110,35 @@ set(PATH_LIBASS     "${DEPS_DIR}/libass")
 
 # ===== Dependencies =====
 ep_cmake(brotli_ep   "${PATH_BROTLI}"   "")
-ep_cmake(freetype_ep "${PATH_FREETYPE}" "-DFT_DISABLE_BROTLI=OFF")
+ep_cmake(freetype_ep "${PATH_FREETYPE}" -DFT_DISABLE_BROTLI=OFF)
 add_dependencies(freetype_ep brotli_ep)
 
-ep_meson(fribidi_ep  "${PATH_FRIBIDI}"  "-Dtests=false -Ddocs=false")
+ep_meson(fribidi_ep  "${PATH_FRIBIDI}" -Ddocs=false -Dtests=false)
 add_dependencies(fribidi_ep freetype_ep)
 
 ep_meson(harfbuzz_ep "${PATH_HARFBUZZ}"
-  "-Dtests=disabled -Ddocs=disabled -Dintrospection=disabled -Dfreetype=enabled"
+    -Dfreetype=enabled
+    -Dtests=disabled
+    -Dintrospection=disabled
+    -Ddocs=disabled
+    -Ddoc_tests=false
+    -Dutilities=disabled
 )
 add_dependencies(harfbuzz_ep freetype_ep fribidi_ep)
 
-# Fontconfig is optional. If it fails on your machine, you can disable it in libass step.
-ep_meson(fontconfig_ep "${PATH_FONTCONFIG}" "-Dtests=disabled -Ddocs=false")
+# Fontconfig is optional. (docs option here is NOT boolean in some versions; use disabled)
+ep_meson(fontconfig_ep "${PATH_FONTCONFIG}" -Ddoc=disabled -Dtests=disabled -Dtools=disabled)
 add_dependencies(fontconfig_ep freetype_ep)
 
-# libass (try with fontconfig enabled; if it fails, change to -Dfontconfig=disabled)
-ep_meson(libass_ep "${PATH_LIBASS}" "-Dfontconfig=enabled -Dharfbuzz=enabled -Dfreetype=enabled")
+# libass
+ep_meson(libass_ep "${PATH_LIBASS}"
+    -Dtest=disabled
+    -Dcompare=disabled
+    -Dprofile=disabled
+    -Dfuzz=disabled
+    -Dcheckasm=disabled
+    -Dfontconfig=enabled
+)
 add_dependencies(libass_ep freetype_ep fribidi_ep harfbuzz_ep fontconfig_ep)
 
 # ===== Your app =====
@@ -149,4 +167,5 @@ set_target_properties(app PROPERTIES
 
 message(STATUS "Profile: ${PROFILE}")
 message(STATUS "Libraries prefix: ${PREFIX_DIR}")
+message(STATUS "ExternalProject meta: ${EP_META_DIR}")
 message(STATUS "Executable output: ${DIST_DIR}/bin")

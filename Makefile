@@ -13,8 +13,7 @@ build-prod:
 	$(MAKE) build PROFILE=prod
 
 clean:
-	rm -f build/CMakeCache.txt
-	rm -rf build/CMakeFiles
+	rm -rf build/cmake
 	rm -rf build/libraries
 	rm -rf dist/bin
 
