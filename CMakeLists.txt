@@ -66,7 +66,7 @@ function(ep_meson name srcdir)
   ExternalProject_Add(${name}
     PREFIX     "${EP_META_DIR}/${name}"
     SOURCE_DIR "${srcdir}"
-    BINARY_DIR "${SUPERBUILD_DIR}"    # must exist for ExternalProject's internal "cd"
+    BINARY_DIR "${SUPERBUILD_DIR}"
     CONFIGURE_COMMAND
       ${CMAKE_COMMAND} -E rm -rf "${_build_subdir}"
       COMMAND ${CMAKE_COMMAND} -E make_directory "${_build_subdir}"
@@ -160,30 +160,34 @@ ep_meson(libass_ep "${PATH_LIBASS}"
 add_dependencies(libass_ep freetype_ep fribidi_ep harfbuzz_ep fontconfig_ep)
 
 # ===== Your app =====
-add_executable(app src/main.cpp)
-add_dependencies(app libass_ep)
+# build a shared library instead of an executable
+add_library(wrms_libass SHARED src/wrms_libass.cpp)
+add_dependencies(wrms_libass libass_ep)
 
-target_include_directories(app PRIVATE "${PREFIX_DIR}/include")
-target_link_directories(app PRIVATE "${PREFIX_DIR}/lib" "${PREFIX_DIR}/lib64")
-target_link_libraries(app PRIVATE ass)
+target_include_directories(wrms_libass PRIVATE "${PREFIX_DIR}/include")
+target_link_directories(wrms_libass PRIVATE "${PREFIX_DIR}/lib" "${PREFIX_DIR}/lib64")
 
 # Link transitive deps explicitly (helps when building static)
+target_link_libraries(wrms_libass PRIVATE ass)
 execute_process(
-  COMMAND ${CMAKE_COMMAND} -E env ${_env} ${PKG_CONFIG_EXECUTABLE} --libs freetype2 harfbuzz fribidi fontconfig
+  COMMAND ${CMAKE_COMMAND} -E env ${_env} ${PKG_CONFIG_EXECUTABLE} --static --libs freetype2 harfbuzz fribidi fontconfig
   OUTPUT_VARIABLE _PC_LIBS
   OUTPUT_STRIP_TRAILING_WHITESPACE
 )
 if(_PC_LIBS)
   separate_arguments(_PC_LIBS)
-  target_link_options(app PRIVATE ${_PC_LIBS})
+  target_link_libraries(wrms_libass PRIVATE ${_PC_LIBS})
 endif()
 
-# Put executable in dist/bin
-set_target_properties(app PROPERTIES
+# Put library in dist/bin
+set_target_properties(wrms_libass PROPERTIES
+  LIBRARY_OUTPUT_DIRECTORY "${DIST_DIR}/bin"
+  ARCHIVE_OUTPUT_DIRECTORY "${DIST_DIR}/bin"
   RUNTIME_OUTPUT_DIRECTORY "${DIST_DIR}/bin"
+  OUTPUT_NAME "wrms_libass"
 )
 
 message(STATUS "Profile: ${PROFILE}")
 message(STATUS "Libraries prefix: ${PREFIX_DIR}")
 message(STATUS "ExternalProject meta: ${EP_META_DIR}")
-message(STATUS "Executable output: ${DIST_DIR}/bin")
+message(STATUS "Library output: ${DIST_DIR}/bin")
