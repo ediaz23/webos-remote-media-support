@@ -3,14 +3,16 @@ import socket
 import threading
 import json
 import uvicorn
-from ctypes import c_void_p, c_int, c_size_t, c_char_p
+import base64
+from ctypes import c_void_p, c_int, c_size_t, c_char_p, POINTER
 from starlette.applications import Starlette
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
+from starlette.middleware.cors import CORSMiddleware
 
-from . import libass_bind
+from .libass_bind import lib
+from .libass_render import WrmsFrame, render_frame_to_webp
 
-lib = libass_bind.lib
 APP_PORT = 19090
 DISCOVERY_PORT = 19091
 
@@ -22,17 +24,26 @@ def c_ensure_engine():
     if c_engine is not None:
         return c_engine
 
+    # engine lifecycle
     lib.wrms_create.argtypes = []
     lib.wrms_create.restype = c_void_p
 
     lib.wrms_destroy.argtypes = [c_void_p]
     lib.wrms_destroy.restype = None
 
+    # config
     lib.wrms_set_frame_size.argtypes = [c_void_p, c_int, c_int]
     lib.wrms_set_frame_size.restype = c_int
 
     lib.wrms_set_track.argtypes = [c_void_p, c_char_p, c_size_t]
     lib.wrms_set_track.restype = c_int
+
+    # render + free frame
+    lib.wrms_render_a8.argtypes = [c_void_p, c_int, POINTER(WrmsFrame)]
+    lib.wrms_render_a8.restype = c_int
+
+    lib.wrms_free_frame.argtypes = [POINTER(WrmsFrame)]
+    lib.wrms_free_frame.restype = None
 
     c_engine = lib.wrms_create()
     if not c_engine:
@@ -43,41 +54,82 @@ def c_ensure_engine():
 async def init_track(request):
     body: dict = await request.json()
 
+    print(f'init_track {body["subName"]}')
+
     hnd = c_ensure_engine()
 
     lib.wrms_set_frame_size(hnd, body['width'], body['height'])
 
     content_b = body['content'].encode('utf-8')
-    # set/replace track (la lib C ya libera el anterior si existía)
     rc = lib.wrms_set_track(hnd, content_b, len(content_b))
     if rc == 0:
-        # TODO: prebuffer [0..quantity_ms] step step_ms:
-        #   - llamar wrms_render_a8(t_ms)
-        #   - componer sprites en RGBA
-        #   - encode WebP en Python
-        #   - base64 -> webp_b64
+        frames = []
+        t = 0
+        while t <= body['quantityMs']:
+            webp = render_frame_to_webp(lib, hnd, body['width'], body['height'], t)
+            frames.append({
+                't_ms': t,
+                'data': webp and base64.b64encode(webp).decode('ascii') or None,
+            })
+            t += body['stepMs']
 
-        out = JSONResponse({'frames': []})
+        out = JSONResponse({'frames': frames})
     else:
-        out = JSONResponse({'frames': [], 'ok': False, 'error': f'wrms_set_track rc={rc}'}, status_code=400)
+        out = JSONResponse({'frames': [], 'error': f'wrms_set_track rc={rc}'}, status_code=400)
     return out
 
 
 async def render_frame(request):
-    # body: dict = await request.json()
-    # TODO: render frame with libass, return webp bytes (image/webp) or 204 if nothing
-    return Response(status_code=200)
+    body: dict = await request.json()
+
+    print(f'render_frame {body["subName"]} ')
+
+    hnd = c_ensure_engine()
+    lib.wrms_set_frame_size(hnd, body['width'], body['height'])
+
+    webp = render_frame_to_webp(lib, hnd, body['width'], body['height'], body['tMs'])
+
+    if webp is None:
+        out = Response(status_code=204)
+    else:
+        out = Response(webp, media_type='image/webp')
+
+    return out
+
+
+async def destroy(request):
+    body: dict = await request.json()
+
+    print(f'destroy {body["subName"]}')
+
+    global c_engine
+    if c_engine is not None:
+        lib.wrms_destroy(c_engine)
+        c_engine = None
+    return JSONResponse({'ok': True})
 
 
 async def health(request):
-    return JSONResponse({'ok': True})
+    qp: dict = request.query_params
 
+    print(f'health {qp["subName"]}')
+
+    return JSONResponse({'ok': True})
 
 app = Starlette(routes=[
     Route('/health', health, methods=['GET']),
     Route('/init', init_track, methods=['POST']),
     Route('/render', render_frame, methods=['POST']),
+    Route('/destroy', destroy, methods=['POST']),
 ])
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+    allow_credentials=False,
+)
 
 
 def get_ip_for(dst_ip: str) -> str:
