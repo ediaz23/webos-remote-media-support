@@ -168,9 +168,9 @@ target_include_directories(wrms_libass PRIVATE "${PREFIX_DIR}/include")
 target_link_directories(wrms_libass PRIVATE "${PREFIX_DIR}/lib" "${PREFIX_DIR}/lib64")
 
 # Link transitive deps explicitly (helps when building static)
-target_link_libraries(wrms_libass PRIVATE ass)
+target_link_libraries(wrms_libass PRIVATE ass freetype harfbuzz fribidi fontconfig brotlicommon brotlidec)
 execute_process(
-  COMMAND ${CMAKE_COMMAND} -E env ${_env} ${PKG_CONFIG_EXECUTABLE} --static --libs freetype2 harfbuzz fribidi fontconfig
+  COMMAND ${CMAKE_COMMAND} -E env ${_env} ${PKG_CONFIG_EXECUTABLE} --static --libs libass freetype2 harfbuzz fribidi fontconfig
   OUTPUT_VARIABLE _PC_LIBS
   OUTPUT_STRIP_TRAILING_WHITESPACE
 )
