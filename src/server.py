@@ -92,8 +92,8 @@ async def render_frame(request):
     if webp is None:
         out = Response(status_code=204)
     else:
-        out = Response(webp, media_type='image/webp')
-
+        out = Response(webp, media_type='image/webp', status_code=200)
+    print(f'render_frame {body["subName"]} {out.status_code}')
     return out
 
 
