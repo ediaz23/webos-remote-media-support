@@ -67,6 +67,38 @@ else
 fi
 echo
 
+echo "== Librerías que deben estar incluidas (por símbolos) =="
+# Esto verifica que el .so contenga (no UND) al menos un símbolo "firma" por librería.
+# Agrega más entradas aquí si necesitas verificar otras librerías.
+declare -A MUST_HAVE_SYMBOLS=(
+  [ass]='ass_library_version'
+  [freetype]='FT_Init_FreeType'
+  [harfbuzz]='hb_buffer_create'
+  [fribidi]='fribidi_shape'
+  [fontconfig]='FcInit'
+)
+
+if ! command -v readelf >/dev/null 2>&1; then
+  echo "  readelf no está disponible"
+else
+  FAIL_INCLUDED=0
+  for lib in "${!MUST_HAVE_SYMBOLS[@]}"; do
+    sym="${MUST_HAVE_SYMBOLS[$lib]}"
+    # si existe y NO es UND, consideramos que está incluido
+    line="$(readelf -Ws "$SO" 2>/dev/null | grep -w "$sym" | head -n1 || true)"
+    if [[ -n "$line" ]] && ! echo "$line" | grep -q ' UND '; then
+      echo "  ✅ $lib ($sym)"
+    else
+      echo "  ❌ $lib (falta $sym definido)"
+      if [[ -n "$line" ]]; then
+        echo "     $line"
+      fi
+      FAIL_INCLUDED=1
+    fi
+  done
+fi
+echo
+
 echo "== Símbolos no resueltos (nm -u) =="
 # Nota: undefined a libc/libstdc++/etc es normal si esas deps están en NEEDED.
 # Esto solo ayuda a ver si quedó algo colgando que NO se resuelve por NEEDED.
@@ -84,4 +116,9 @@ if [[ -z "${MISSING// }" ]]; then
   echo "  ℹ️ Si quieres 'TODO dentro', entonces cualquier cosa listada en NEEDED NO está dentro."
 else
   echo "  ❌ Le faltan librerías en runtime: ver sección FALTANTES."
+fi
+
+# Si falta alguna librería "incluida", falla el script aunque ldd no tenga missing.
+if [[ "${FAIL_INCLUDED:-0}" -ne 0 ]]; then
+  exit 2
 fi
