@@ -220,20 +220,20 @@ target_link_directories(wrms_libass PRIVATE "${PREFIX_DIR}/lib" "${PREFIX_DIR}/l
 
 # Link transitive deps explicitly (helps when building static)
 target_link_libraries(wrms_libass PRIVATE
-  unibreak
   ass
+  fontconfig
+  uuid
+  expat
+  harfbuzz
+  fribidi
+  freetype
   png
   z
   bz2
   brotlienc
   brotlidec
   brotlicommon
-  freetype
-  harfbuzz
-  fribidi
-  expat
-  uuid
-  fontconfig
+  unibreak
 )
 
 execute_process(
