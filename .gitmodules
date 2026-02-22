@@ -16,6 +16,3 @@
 [submodule "lib/brotli"]
 	path = lib/brotli
 	url = https://github.com/google/brotli.git
-[submodule "lib/libunibreak"]
-	path = lib/libunibreak
-	url = https://github.com/adah1972/libunibreak.git

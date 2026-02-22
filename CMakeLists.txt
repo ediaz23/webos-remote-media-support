@@ -127,8 +127,26 @@ function(ep_autotools name srcdir)
   )
 endfunction()
 
+function(find_deb_so pkg so_name out_var)
+  execute_process(
+    COMMAND /bin/sh -c "dpkg -L ${pkg} | grep -E '/${so_name}$' | head -n1"
+    OUTPUT_VARIABLE _p
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+  )
+  if(NOT _p)
+    message(FATAL_ERROR "No se encontró ${so_name} en el paquete ${pkg}")
+  endif()
+  set(${out_var} "${_p}" PARENT_SCOPE)
+endfunction()
+
+function(bundle_deb_so pkg so_name)
+  find_deb_so(${pkg} ${so_name} _SO_PATH)
+  add_custom_command(TARGET wrms_libass POST_BUILD
+    COMMAND cp -vL "${_SO_PATH}" "${DIST_DIR}/lib/"
+  )
+endfunction()
+
 # ===== Paths inside lib/ =====
-set(PATH_LIBUNIBREAK "${DEPS_DIR}/libunibreak")
 set(PATH_BROTLI      "${DEPS_DIR}/brotli")
 set(PATH_FREETYPE    "${DEPS_DIR}/freetype")
 set(PATH_FRIBIDI     "${DEPS_DIR}/fribidi")
@@ -138,7 +156,6 @@ set(PATH_LIBASS      "${DEPS_DIR}/libass")
 
 
 # ===== Dependencies =====
-ep_autotools(libunibreak_ep "${PATH_LIBUNIBREAK}")
 ep_cmake(brotli_ep   "${PATH_BROTLI}")
 
 # FreeType
@@ -191,7 +208,7 @@ ep_meson(libass_ep "${PATH_LIBASS}"
   -Dfontconfig=enabled
   -Dlibunibreak=enabled
 )
-add_dependencies(libass_ep freetype_ep fribidi_ep harfbuzz_ep fontconfig_ep libunibreak_ep)
+add_dependencies(libass_ep freetype_ep fribidi_ep harfbuzz_ep fontconfig_ep)
 
 # ===== Your app =====
 # build a shared library instead of an executable
@@ -202,23 +219,21 @@ target_include_directories(wrms_libass PRIVATE "${PREFIX_DIR}/include")
 target_link_directories(wrms_libass PRIVATE "${PREFIX_DIR}/lib" "${PREFIX_DIR}/lib64")
 
 # Link transitive deps explicitly (helps when building static)
-target_link_libraries(
-  wrms_libass
-  PRIVATE
+target_link_libraries(wrms_libass PRIVATE
+  unibreak
   ass
-  fontconfig
-  uuid
-  expat
-  harfbuzz
-  fribidi
-  freetype
   png
   z
   bz2
   brotlienc
   brotlidec
   brotlicommon
-  unibreak
+  freetype
+  harfbuzz
+  fribidi
+  expat
+  uuid
+  fontconfig
 )
 
 execute_process(
@@ -241,6 +256,13 @@ set_target_properties(wrms_libass PROPERTIES
   INSTALL_RPATH "\$ORIGIN/../lib"
   INSTALL_RPATH_USE_LINK_PATH FALSE
 )
+
+bundle_deb_so(libuuid1     libuuid.so.1)
+bundle_deb_so(libexpat1    libexpat.so.1)
+bundle_deb_so(libpng16-16  libpng16.so.16)
+bundle_deb_so(zlib1g       libz.so.1)
+bundle_deb_so(libbz2-1.0   libbz2.so.1.0)
+bundle_deb_so(libunibreak1 libunibreak.so.1)
 
 message(STATUS "Profile: ${PROFILE}")
 message(STATUS "Libraries prefix: ${PREFIX_DIR}")

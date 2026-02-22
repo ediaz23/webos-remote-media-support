@@ -3,7 +3,8 @@ FROM gcc:11-bullseye
 RUN apt-get update && apt-get install -y --no-install-recommends \
   cmake ninja-build pkg-config python3 python3-pip git ca-certificates \
   bzip2 libbz2-dev \
-  libexpat1-dev uuid-dev\
+  libexpat1-dev uuid-dev \
+  libunibreak1 libunibreak-dev \
   sudo passwd \
   && rm -rf /var/lib/apt/lists/*
 
