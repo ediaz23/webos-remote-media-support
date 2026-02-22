@@ -26,3 +26,4 @@ __pycache__/
 /docker/user_data_38/
 /docker/user_data_68/
 .venv
+/tmp/
