@@ -3,14 +3,13 @@ import socket
 import threading
 import json
 import uvicorn
-import base64
 from ctypes import c_void_p, c_int, c_size_t, c_char_p, c_uint8, POINTER
 from starlette.applications import Starlette
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 from starlette.middleware.cors import CORSMiddleware
 
-from .tools import load_default_font
+from .tools import load_default_font, parse_ass_events, encode_subs
 from .libass_bind import lib, find_lib_file
 from .libass_render import WrmsFrame, render_frame_to_webp
 
@@ -18,6 +17,7 @@ APP_PORT = 19090
 DISCOVERY_PORT = 19091
 
 c_engine = None
+event_list = []
 
 
 def c_ensure_engine():
@@ -68,48 +68,71 @@ def c_ensure_engine():
 
 async def init_track(request):
     body: dict = await request.json()
-
     print(f'init_track {body["subName"]}')
+    hnd = c_ensure_engine()
+
+    content_b = body['content'].encode('utf-8')
+    rc = lib.wrms_set_track(hnd, content_b, len(content_b))
+
+    event_list.clear()
+    event_list.extend(parse_ass_events(body['content']))
+
+    if rc == 0:
+        out = JSONResponse({'events': event_list})
+    else:
+        out = JSONResponse({'events': [], 'error': f'wrms_set_track rc={rc}'}, status_code=400)
+
+    print(f'init_track {body["subName"]} {out.status_code} {len(event_list)}')
+    return out
+
+
+async def init_render(request):
+    body: dict = await request.json()
+    print(f'init_render {body["subName"]} tms={body["quantityMs"]}')
 
     hnd = c_ensure_engine()
 
     lib.wrms_set_frame_size(hnd, body['width'], body['height'])
 
-    content_b = body['content'].encode('utf-8')
-    rc = lib.wrms_set_track(hnd, content_b, len(content_b))
-    if rc == 0:
-        frames = []
-        t = 0
-        while t <= body['quantityMs']:
-            webp = render_frame_to_webp(lib, hnd, body['width'], body['height'], t)
-            frames.append({
-                't_ms': t,
-                'data': webp and base64.b64encode(webp).decode('ascii') or None,
-            })
-            t += body['stepMs']
+    event_index = body['initEvent']
+    duration = 0
+    sub_list = []
+    while duration < body['quantityMs'] and event_index < len(event_list):
+        ev = event_list[event_index]
+        print(f'init_render {body["subName"]} i={event_index} id={ev["id"]}')
+        if ev['type'] == 'static':
+            webp = render_frame_to_webp(lib, hnd, body['width'], body['height'], ev['start_ms'])
+        else:
+            webp = None
+        sub_list.append({'id': ev['id'], 'data': webp})
+        event_index += 1
+        duration += ev['dur_ms']
 
-        out = JSONResponse({'frames': frames})
-    else:
-        out = JSONResponse({'frames': [], 'error': f'wrms_set_track rc={rc}'}, status_code=400)
-    return out
+    print(f'init_render {body["subName"]} tms={body["quantityMs"]} size={len(sub_list)} end')
+    return Response(bytes(encode_subs(sub_list)), media_type='application/octet-stream', status_code=200)
 
 
 async def render_frame(request):
     body: dict = await request.json()
 
-    print(f'render_frame {body["subName"]} {body["tMs"]}')
+    print(f'render_frame {body["subName"]} {body["eventIndexList"][0]}')
 
     hnd = c_ensure_engine()
     lib.wrms_set_frame_size(hnd, body['width'], body['height'])
 
-    webp = render_frame_to_webp(lib, hnd, body['width'], body['height'], body['tMs'])
+    sub_list = []
+    for event_index in body['eventIndexList']:
+        ev = event_list[event_index]
+        print(f'render_frame {body["subName"]} i={event_index} id={ev["id"]}')
+        if ev['type'] == 'static':
+            webp = render_frame_to_webp(lib, hnd, body['width'], body['height'], ev['start_ms'])
+        else:
+            webp = None
+        sub_list.append({'id': ev['id'], 'data': webp})
+        event_index += 1
 
-    if webp is None:
-        out = Response(status_code=204)
-    else:
-        out = Response(webp, media_type='image/webp', status_code=200)
-    print(f'render_frame {body["subName"]} {body["tMs"]} {out.status_code}')
-    return out
+    print(f'render_frame {body["subName"]} {body["eventIndexList"][0]} size={len(sub_list)} end')
+    return Response(bytes(encode_subs(sub_list)), media_type='application/octet-stream', status_code=200)
 
 
 async def destroy(request):
@@ -134,6 +157,7 @@ async def health(request):
 app = Starlette(routes=[
     Route('/health', health, methods=['GET', 'OPTIONS']),
     Route('/init', init_track, methods=['POST', 'OPTIONS']),
+    Route('/initRender', init_render, methods=['POST', 'OPTIONS']),
     Route('/render', render_frame, methods=['POST', 'OPTIONS']),
     Route('/destroy', destroy, methods=['POST', 'OPTIONS']),
 ])

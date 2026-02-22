@@ -36,6 +36,13 @@ def _rgba_from_libass_color(color: int):
     return r, g, b, a
 
 
+def _save_to_disk(img: Image, t_ms):
+    pass
+    # import os
+    # os.makedirs('tmp', exist_ok=True)
+    # img.save(f'tmp/{int(t_ms)}.png', format='PNG')
+
+
 def render_frame_to_webp(lib, hnd, width: int, height: int, t_ms: int):
     '''
     Calls wrms_render_a8() and composites A8 sprites into an RGBA canvas,
@@ -120,6 +127,7 @@ def render_frame_to_webp(lib, hnd, width: int, height: int, t_ms: int):
         img = Image.frombytes('RGBA', (width, height), bytes(out))
         bio = BytesIO()
         img.save(bio, format='WEBP', lossless=True, method=6)
+        _save_to_disk(img, t_ms)
         return bio.getvalue()
 
     finally:

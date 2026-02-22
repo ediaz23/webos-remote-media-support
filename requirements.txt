@@ -1,7 +1,7 @@
+fonttools
+brotli
+pysubs2
 uvicorn[standard]==0.30.6
 starlette==0.38.6
 Pillow>=8.0.0,<11
-fonttools
-brotli
 pydevd
-
