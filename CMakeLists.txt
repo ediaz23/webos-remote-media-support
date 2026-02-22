@@ -220,6 +220,7 @@ target_link_directories(wrms_libass PRIVATE "${PREFIX_DIR}/lib" "${PREFIX_DIR}/l
 
 # Link transitive deps explicitly (helps when building static)
 target_link_libraries(wrms_libass PRIVATE
+  -Wl,--start-group
   ass
   fontconfig
   uuid
@@ -234,6 +235,7 @@ target_link_libraries(wrms_libass PRIVATE
   brotlidec
   brotlicommon
   unibreak
+  -Wl,--end-group
 )
 
 execute_process(
