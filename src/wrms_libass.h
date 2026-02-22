@@ -36,6 +36,10 @@ void wrms_destroy(wrms_handle_t h);
 // returns 0 ok, !=0 error
 int wrms_set_track(wrms_handle_t h, const char* ass_utf8, size_t ass_len);
 
+// add font bytes (name is a family name key you will use as default)
+int wrms_add_font_mem(wrms_handle_t h, const char* name, const uint8_t* data, size_t data_len);
+int wrms_set_default_font(wrms_handle_t h, const char* name);
+
 // Renderer params (para que libass calcule cosas a ese size)
 int wrms_set_frame_size(wrms_handle_t h, int width, int height);
 

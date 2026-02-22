@@ -4,13 +4,14 @@ import threading
 import json
 import uvicorn
 import base64
-from ctypes import c_void_p, c_int, c_size_t, c_char_p, POINTER
+from ctypes import c_void_p, c_int, c_size_t, c_char_p, c_uint8, POINTER
 from starlette.applications import Starlette
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 from starlette.middleware.cors import CORSMiddleware
 
-from .libass_bind import lib
+from . import tools
+from .libass_bind import lib, find_lib_file
 from .libass_render import WrmsFrame, render_frame_to_webp
 
 APP_PORT = 19090
@@ -45,9 +46,23 @@ def c_ensure_engine():
     lib.wrms_free_frame.argtypes = [POINTER(WrmsFrame)]
     lib.wrms_free_frame.restype = None
 
+    lib.wrms_add_font_mem.argtypes = [c_void_p, c_char_p, POINTER(c_uint8), c_size_t]
+    lib.wrms_add_font_mem.restype = c_int
+
+    lib.wrms_set_default_font.argtypes = [c_void_p, c_char_p]
+    lib.wrms_set_default_font.restype = c_int
+
     c_engine = lib.wrms_create()
     if not c_engine:
         raise RuntimeError('wrms_create() failed')
+
+    font_path = find_lib_file('default.woff2')
+    tools.load_default_font(lib, c_engine, font_path)
+    font_name = tools.get_font_family(font_path) or 'default'
+    rc = lib.wrms_set_default_font(c_engine, font_name.encode('utf-8'))
+    if rc != 0:
+        raise RuntimeError('wrms_set_default_font rc=%s' % rc)
+
     return c_engine
 
 
@@ -82,7 +97,7 @@ async def init_track(request):
 async def render_frame(request):
     body: dict = await request.json()
 
-    print(f'render_frame {body["subName"]} ')
+    print(f'render_frame {body["subName"]} {body["tMs"]}')
 
     hnd = c_ensure_engine()
     lib.wrms_set_frame_size(hnd, body['width'], body['height'])
@@ -93,7 +108,7 @@ async def render_frame(request):
         out = Response(status_code=204)
     else:
         out = Response(webp, media_type='image/webp', status_code=200)
-    print(f'render_frame {body["subName"]} {out.status_code}')
+    print(f'render_frame {body["subName"]} {body["tMs"]} {out.status_code}')
     return out
 
 
@@ -117,17 +132,17 @@ async def health(request):
     return JSONResponse({'ok': True})
 
 app = Starlette(routes=[
-    Route('/health', health, methods=['GET']),
-    Route('/init', init_track, methods=['POST']),
-    Route('/render', render_frame, methods=['POST']),
-    Route('/destroy', destroy, methods=['POST']),
+    Route('/health', health, methods=['GET', 'OPTIONS']),
+    Route('/init', init_track, methods=['POST', 'OPTIONS']),
+    Route('/render', render_frame, methods=['POST', 'OPTIONS']),
+    Route('/destroy', destroy, methods=['POST', 'OPTIONS']),
 ])
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=['*'],
+    allow_methods=['*'],
+    allow_headers=['*'],
     allow_credentials=False,
 )
 

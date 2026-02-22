@@ -1,5 +1,5 @@
 
-from ctypes import c_int, c_uint32, c_size_t, c_uint8, c_void_p, pointer, cast
+from ctypes import c_int, c_uint32, c_size_t, c_uint8, c_void_p, pointer, cast, string_at
 from ctypes import Structure, POINTER
 from io import BytesIO
 from PIL import Image
@@ -54,8 +54,8 @@ def render_frame_to_webp(lib, hnd, width: int, height: int, t_ms: int):
         out = bytearray(width * height * 4)  # RGBA, transparent
 
         bm_addr = cast(frame.bitmaps, c_void_p).value
-        bm = (c_uint8 * frame.bitmaps_len).from_address(bm_addr)
-        bm_mv = memoryview(bm)
+        bm_bytes = string_at(bm_addr, frame.bitmaps_len)  # bytes copy
+        bm_mv = memoryview(bm_bytes)
 
         for i in range(int(frame.sprites_len)):
             sp = frame.sprites[i]

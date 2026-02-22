@@ -34,8 +34,7 @@ wrms_handle_t wrms_create() {
     return nullptr;
   }
 
-  // TODO (opcional): configurar fonts aquí cuando quieras:
-  // ass_set_fonts(e->renderer, nullptr, "Arial", 1, nullptr, 1);
+  ass_set_fonts(e->renderer, NULL, "Sans", ASS_FONTPROVIDER_AUTODETECT, NULL, 1);
 
   return (wrms_handle_t)e;
 }
@@ -63,6 +62,7 @@ int wrms_set_frame_size(wrms_handle_t h, int width, int height) {
   e->w = width;
   e->h = height;
   ass_set_frame_size(e->renderer, e->w, e->h);
+  ass_set_storage_size(e->renderer, e->w, e->h);
   return 0;
 }
 
@@ -79,6 +79,31 @@ int wrms_set_track(wrms_handle_t h, const char* ass_utf8, size_t ass_len) {
   e->track = ass_read_memory(e->lib, (char*)ass_utf8, (int)ass_len, nullptr);
   if (!e->track) return 3;
 
+  return 0;
+}
+
+int wrms_add_font_mem(wrms_handle_t h, const char* name, const uint8_t* data, size_t data_len) {
+  if (!h) return 1;
+  if (!name || !name[0]) return 2;
+  if (!data || data_len == 0) return 3;
+
+  Engine* e = (Engine*)h;
+  std::lock_guard<std::mutex> lk(e->mtx);
+
+  // libass copies the data internally, so we can pass our buffer as-is
+  ass_add_font(e->lib, name, (char*)data, data_len);
+  return 0;
+}
+
+int wrms_set_default_font(wrms_handle_t h, const char* name) {
+  if (!h) return 1;
+  if (!name || !name[0]) return 2;
+
+  Engine* e = (Engine*)h;
+  std::lock_guard<std::mutex> lk(e->mtx);
+
+  // use only embedded fonts (NONE) since we're injecting fonts ourselves
+  ass_set_fonts(e->renderer, NULL, name, ASS_FONTPROVIDER_NONE, NULL, 1);
   return 0;
 }
 

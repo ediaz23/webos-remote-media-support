@@ -5,6 +5,7 @@ WORKDIR := /work
 
 build:
 	docker run --rm -it -v "$(PWD):$(WORKDIR)" -w $(WORKDIR) -e PROFILE=$(PROFILE) $(IMAGE)
+	cp -f src/default.woff2 dist/bin/
 
 build-dev:
 	$(MAKE) build PROFILE=dev
