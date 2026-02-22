@@ -10,7 +10,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 from starlette.middleware.cors import CORSMiddleware
 
-from . import tools
+from .tools import load_default_font
 from .libass_bind import lib, find_lib_file
 from .libass_render import WrmsFrame, render_frame_to_webp
 
@@ -57,8 +57,8 @@ def c_ensure_engine():
         raise RuntimeError('wrms_create() failed')
 
     font_path = find_lib_file('default.woff2')
-    tools.load_default_font(lib, c_engine, font_path)
-    font_name = tools.get_font_family(font_path) or 'default'
+    font_name = load_default_font(lib, c_engine, font_path, 'default')
+    print(f'default font {font_name}')
     rc = lib.wrms_set_default_font(c_engine, font_name.encode('utf-8'))
     if rc != 0:
         raise RuntimeError('wrms_set_default_font rc=%s' % rc)

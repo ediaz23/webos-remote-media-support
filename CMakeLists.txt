@@ -25,6 +25,7 @@ file(MAKE_DIRECTORY "${EP_META_DIR}")
 file(MAKE_DIRECTORY "${PREFIX_DIR}")
 file(MAKE_DIRECTORY "${DIST_DIR}")
 file(MAKE_DIRECTORY "${DIST_DIR}/bin")
+file(MAKE_DIRECTORY "${DIST_DIR}/lib")
 
 # ===== Profiles (dev/prod) =====
 set(PROFILE "dev" CACHE STRING "Build profile: dev or prod")
@@ -109,17 +110,47 @@ function(ep_cmake name srcdir)
   )
 endfunction()
 
+function(ep_autotools name srcdir)
+  ExternalProject_Add(${name}
+    PREFIX     "${EP_META_DIR}/${name}"
+    SOURCE_DIR "${srcdir}"
+    BINARY_DIR "${SUPERBUILD_DIR}/${name}"
+    CONFIGURE_COMMAND
+      ${CMAKE_COMMAND} -E make_directory "${SUPERBUILD_DIR}/${name}"
+      COMMAND ${CMAKE_COMMAND} -E chdir "${srcdir}" ./bootstrap
+      COMMAND ${CMAKE_COMMAND} -E chdir "${SUPERBUILD_DIR}/${name}"
+        ${CMAKE_COMMAND} -E env ${_env} CFLAGS=-fPIC
+        "${srcdir}/configure" --prefix=${PREFIX_DIR} --enable-static --disable-shared
+    BUILD_COMMAND   ${CMAKE_COMMAND} -E env ${_env} make -C "${SUPERBUILD_DIR}/${name}"
+    INSTALL_COMMAND ${CMAKE_COMMAND} -E env ${_env} make -C "${SUPERBUILD_DIR}/${name}" install
+    USES_TERMINAL_BUILD ON
+  )
+endfunction()
+
 # ===== Paths inside lib/ =====
-set(PATH_BROTLI     "${DEPS_DIR}/brotli")
-set(PATH_FREETYPE   "${DEPS_DIR}/freetype")
-set(PATH_FRIBIDI    "${DEPS_DIR}/fribidi")
-set(PATH_HARFBUZZ   "${DEPS_DIR}/harfbuzz")
-set(PATH_FONTCONFIG "${DEPS_DIR}/fontconfig")
-set(PATH_LIBASS     "${DEPS_DIR}/libass")
+set(PATH_LIBUNIBREAK "${DEPS_DIR}/libunibreak")
+set(PATH_BROTLI      "${DEPS_DIR}/brotli")
+set(PATH_FREETYPE    "${DEPS_DIR}/freetype")
+set(PATH_FRIBIDI     "${DEPS_DIR}/fribidi")
+set(PATH_HARFBUZZ    "${DEPS_DIR}/harfbuzz")
+set(PATH_FONTCONFIG  "${DEPS_DIR}/fontconfig")
+set(PATH_LIBASS      "${DEPS_DIR}/libass")
+
 
 # ===== Dependencies =====
+ep_autotools(libunibreak_ep "${PATH_LIBUNIBREAK}")
 ep_cmake(brotli_ep   "${PATH_BROTLI}")
-ep_cmake(freetype_ep "${PATH_FREETYPE}" -DFT_DISABLE_BROTLI=OFF)
+
+# FreeType
+ep_meson(freetype_ep  "${PATH_FREETYPE}"
+  -Dbrotli=enabled
+  -Dbzip2=enabled
+  -Dharfbuzz=enabled
+  -Dmmap=auto
+  -Dpng=enabled
+  -Dtests=disabled
+  -Dzlib=enabled
+)
 add_dependencies(freetype_ep brotli_ep)
 
 # FriBidi
@@ -145,6 +176,8 @@ ep_meson(fontconfig_ep "${PATH_FONTCONFIG}"
   -Ddoc=disabled
   -Dtests=disabled
   -Dtools=disabled
+  -Dcache-build=enabled
+  -Dxml-backend=expat
 )
 add_dependencies(fontconfig_ep freetype_ep)
 
@@ -156,8 +189,9 @@ ep_meson(libass_ep "${PATH_LIBASS}"
   -Dfuzz=disabled
   -Dcheckasm=disabled
   -Dfontconfig=enabled
+  -Dlibunibreak=enabled
 )
-add_dependencies(libass_ep freetype_ep fribidi_ep harfbuzz_ep fontconfig_ep)
+add_dependencies(libass_ep freetype_ep fribidi_ep harfbuzz_ep fontconfig_ep libunibreak_ep)
 
 # ===== Your app =====
 # build a shared library instead of an executable
@@ -168,7 +202,25 @@ target_include_directories(wrms_libass PRIVATE "${PREFIX_DIR}/include")
 target_link_directories(wrms_libass PRIVATE "${PREFIX_DIR}/lib" "${PREFIX_DIR}/lib64")
 
 # Link transitive deps explicitly (helps when building static)
-target_link_libraries(wrms_libass PRIVATE ass freetype harfbuzz fribidi fontconfig brotlicommon brotlidec)
+target_link_libraries(
+  wrms_libass
+  PRIVATE
+  ass
+  fontconfig
+  uuid
+  expat
+  harfbuzz
+  fribidi
+  freetype
+  png
+  z
+  bz2
+  brotlienc
+  brotlidec
+  brotlicommon
+  unibreak
+)
+
 execute_process(
   COMMAND ${CMAKE_COMMAND} -E env ${_env} ${PKG_CONFIG_EXECUTABLE} --static --libs libass freetype2 harfbuzz fribidi fontconfig
   OUTPUT_VARIABLE _PC_LIBS
@@ -185,6 +237,10 @@ set_target_properties(wrms_libass PROPERTIES
   ARCHIVE_OUTPUT_DIRECTORY "${DIST_DIR}/bin"
   RUNTIME_OUTPUT_DIRECTORY "${DIST_DIR}/bin"
   OUTPUT_NAME "wrms_libass"
+  BUILD_RPATH "\$ORIGIN/../lib"
+  INSTALL_RPATH "\$ORIGIN/../lib"
+  BUILD_RPATH_USE_ORIGIN TRUE
+  INSTALL_RPATH_USE_LINK_PATH FALSE
 )
 
 message(STATUS "Profile: ${PROFILE}")

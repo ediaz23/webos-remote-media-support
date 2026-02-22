@@ -4,13 +4,15 @@ from fontTools.ttLib import TTFont, TTCollection
 from ctypes import c_uint8
 
 
-def load_default_font(lib, hnd, path):
-    with open(path, 'rb') as f:
+def load_default_font(lib, hnd, font_path, default_name):
+    with open(font_path, 'rb') as f:
         data = f.read()
     arr = (c_uint8 * len(data)).from_buffer_copy(data)
-    rc = lib.wrms_add_font_mem(hnd, b'default', arr, len(data))
+    font_name = get_font_family(font_path) or default_name
+    rc = lib.wrms_add_font_mem(hnd, font_name.encode('utf-8'), arr, len(data))
     if rc != 0:
         raise RuntimeError('wrms_add_font_mem rc=%s' % rc)
+    return font_name
 
 
 def get_font_family(path: str):

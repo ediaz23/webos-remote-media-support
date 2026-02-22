@@ -34,8 +34,6 @@ wrms_handle_t wrms_create() {
     return nullptr;
   }
 
-  ass_set_fonts(e->renderer, NULL, "Sans", ASS_FONTPROVIDER_AUTODETECT, NULL, 1);
-
   return (wrms_handle_t)e;
 }
 
@@ -90,8 +88,11 @@ int wrms_add_font_mem(wrms_handle_t h, const char* name, const uint8_t* data, si
   Engine* e = (Engine*)h;
   std::lock_guard<std::mutex> lk(e->mtx);
 
-  // libass copies the data internally, so we can pass our buffer as-is
-  ass_add_font(e->lib, name, (char*)data, data_len);
+  char* copy = (char*)malloc(data_len);
+  if (!copy) return 4;
+  memcpy(copy, data, data_len);
+
+  ass_add_font(e->lib, name, copy, data_len);
   return 0;
 }
 
@@ -102,7 +103,6 @@ int wrms_set_default_font(wrms_handle_t h, const char* name) {
   Engine* e = (Engine*)h;
   std::lock_guard<std::mutex> lk(e->mtx);
 
-  // use only embedded fonts (NONE) since we're injecting fonts ourselves
   ass_set_fonts(e->renderer, NULL, name, ASS_FONTPROVIDER_NONE, NULL, 1);
   return 0;
 }
