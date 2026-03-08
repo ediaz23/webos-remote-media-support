@@ -6,17 +6,17 @@ A local companion server for legacy LG webOS TVs that offloads heavy media-relat
 ### Build image
 
 ```bash
-docker build -t webos-remote-media-support .  --no-cache --network=host
+docker buildx build -t webos-remote-media-support .  --no-cache --network=host
 ```
 
 ### Compile (DEV)
 
 ```bash
-docker run --rm -it -v "$PWD:/work" -w /work webos-remote-media-support bash -lc "cmake -S . -B build -DPROFILE=dev && cmake --build build -j"
+docker run --rm -it -v "$PWD:/work" webos-remote-media-support bash -lc "cmake -S . -B build -DPROFILE=dev && cmake --build build -j"
 ```
 
 ### Compile (PROD)
 
 ```bash
-docker run --rm -it -v "$PWD:/work" -w /work webos-remote-media-support bash -lc "cmake -S . -B build -DPROFILE=prod && cmake --build build -j"
+docker run --rm -it -v "$PWD:/work" webos-remote-media-support bash -lc "cmake -S . -B build -DPROFILE=prod && cmake --build build -j"
 ```

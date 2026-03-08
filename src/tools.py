@@ -10,14 +10,14 @@ from ctypes import c_uint8
 def _get_font_family(path: str):
     result = None
     try:
-        if path.lower().endswith(".ttc"):
+        if path.lower().endswith('.ttc'):
             tc = TTCollection(path)
             tt = tc.fonts[0] if tc.fonts else None
         else:
             tt = TTFont(path)
 
-        if tt and "name" in tt:
-            names = tt["name"].names
+        if tt and 'name' in tt:
+            names = tt['name'].names
             for name_id in (16, 1):  # Preferred Family, Family
                 if result is None:
                     for rec in names:
